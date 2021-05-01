@@ -1,6 +1,10 @@
 <component name="ProjectDictionaryState">
   <dictionary name="Jason Lau">
     <words>
+      <w>dataloader</w>
+      <w>jsonl</w>
+      <w>logits</w>
+      <w>probs</w>
       <w>unigram</w>
     </words>
   </dictionary>

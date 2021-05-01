@@ -32,47 +32,7 @@ class DAG(object):
     def get_graph_dict(self):
         return self.graph
 
-    def predecessors(self, node: tuple):
-        """ Returns a list of all predecessors of the given node """
-
-        return [key for key in self.graph if node in self.graph[key]]
-
-    def downstream(self, node: tuple):
-        """ Returns a list of all nodes this node has edges towards. """
-        if node.index not in self.graph:
-            raise KeyError('node %s is not in graph' % node.index)
-        return list(self.graph[node.index])
-
-    def all_downstreams(self, node, graph=None):
-        """Returns a list of all nodes ultimately downstream
-        of the given node in the dependency graph, in
-        topological order."""
-        if graph is None:
-            graph = self.graph
-        nodes = [node]
-        nodes_seen = set()
-        i = 0
-        while i < len(nodes):
-            downstreams = self.downstream(nodes[i], graph)
-            for downstream_node in downstreams:
-                if downstream_node not in nodes_seen:
-                    nodes_seen.add(downstream_node)
-                    nodes.append(downstream_node)
-            i += 1
-        return list(
-            filter(
-                lambda node: node in nodes_seen,
-                self.topological_sort(graph=graph)
-            )
-        )
-
-    def all_leaves(self, graph=None):
-        """ Return a list of all leaves (nodes with no downstreams) """
-        if graph is None:
-            graph = self.graph
-        return [key for key in graph if not graph[key]]
-
-    def topological_sort(self):  # 返回从根到叶子的排序列表
+    def topological_sort(self):
         """ Returns a topological ordering of the DAG.
         Raises an error if this is not possible (graph is not valid).
         """
@@ -103,20 +63,6 @@ class DAG(object):
             return l
         else:
             raise ValueError('graph is not acyclic')
-
-    def dag_depth(self, node, graph=None, depth=0):
-        if self.graph == {}:
-            return 0
-        nodes = self.downstream(node)
-        if len(nodes) == 0:
-            self.node_depth.append(depth)
-        else:
-            for node in nodes:
-                self.dag_depth(node, self.graph, depth + 1)
-        return max(self.node_depth)
-
-    def size(self):
-        return len(self.graph)
 
 
 def create_graph(items):

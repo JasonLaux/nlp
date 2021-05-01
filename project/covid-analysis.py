@@ -1,23 +1,26 @@
 from bert_detection import RumourClassifier
 import torch
-import torch.nn as nn
-from transformers import BertModel, BertTokenizer
-import torch.optim as optim
-import time
-from torch.utils.data import Dataset, DataLoader
+import re
+import random
+from torch.utils.data import DataLoader
 import json
-from graph_sort import create_graph
 from bert_detection import TweetDataset
 import pandas as pd
 from textblob import TextBlob
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 
+# Trained model from Task 1. Specify the path...
 MODEL_PATH = "sstcls.pth"
+
+# Relevant data path
 COVID_DATA_PATH = "./data/covid.data.jsonl"
 COVID_LABEL_PATH = './data/covid_label.json'
 DEV_DATA_PATH = './data/dev.data.jsonl'
+DEV_LABEL_PATH = './data/dev.label.json'
+TRAIN_DATA_PATH = './data/train.data.jsonl'
+TRAIN_LABLE_PATH = './data/train.label.json'
+TEST_DATA_PATH = './data/test.data.jsonl'
 
 
 def load_model():
@@ -28,8 +31,12 @@ def load_model():
     return model
 
 
-def classify_tweets(model, data_loader):
-    pass
+def clean_tweet(tweet):
+    '''
+    Utility function to clean tweet text by removing links, special characters
+    using simple regex statements.
+    '''
+    return ' '.join(re.sub("(@[A-Za-z0-9]+)|([^0-9A-Za-z \t]) | (\w+:\/\/\S+)", " ", tweet).split())
 
 
 def sa_text(score):
@@ -55,49 +62,20 @@ def predict(net, dataloader):
             else:
                 label = "non-rumour"
             dict_pred.update({id_str[0]: label})
-    with open("project/data/test_label.json", "w+") as f:
+    with open("./data/test_pred_label.json", "w+") as f:
         json.dump(dict_pred, f)
     # return dict_pred
-
-
-# def sa_score():
-#     rumours_datalist = []
-#     non_rumours_datalist = []
-#     labels = [item[1] for item in json.load(open('./data/covid_label.json', encoding="utf-8")).items()]
-#     with open('./data/covid.data.jsonl', encoding="utf-8") as f:
-#         data_obj = f.readlines()
-#         for idx, label in enumerate(labels):
-#             if label == 'non-rumour':
-#                 non_rumours_datalist.append(json.loads(data_obj[idx])[0])
-#             else:
-#                 rumours_datalist.append(json.loads(data_obj[idx])[0])
-#
-#     rumours_sa = [[TextBlob(tweet["text"]).sentiment[0], TextBlob(tweet["text"]).sentiment[1],
-#                    sa_text(TextBlob(tweet["text"]).sentiment[0])] for tweet in rumours_datalist]
-#
-#     non_rumours_sa = [[TextBlob(tweet["text"]).sentiment[0], TextBlob(tweet["text"]).sentiment[1],
-#                        sa_text(TextBlob(tweet["text"]).sentiment[0])] for tweet in non_rumours_datalist]
-#
-#     # rumours_sa = rumours_sa[:4001]
-#     # non_rumours_sa = non_rumours_sa[:4001]
-#
-#     rumours_df = pd.DataFrame(data=rumours_sa, columns=['Polarity', 'Subjectivity', 'Description'])
-#
-#     non_rumours_df = pd.DataFrame(data=non_rumours_sa, columns=['Polarity', 'Subjectivity', 'Description'])
-#
-#     print(rumours_df.groupby(['Description']).size().reset_index(name='counts'))
-#     print(non_rumours_df.groupby(['Description']).size().reset_index(name='counts'))
 
 
 def classify_dataset():
     non_rumours_datalist = []
     rumours_datalist = []
 
-    with open('./data/covid_label.json', encoding="utf-8") as label_reader:
+    with open(COVID_LABEL_PATH, encoding="utf-8") as label_reader:
 
         labels = [item[1] for item in json.load(label_reader).items()]
 
-    with open('./data/covid.data.jsonl', encoding="utf-8") as f:
+    with open(COVID_DATA_PATH, encoding="utf-8") as f:
         data_obj = f.readlines()
         for idx, label in enumerate(labels):
             if label == 'non-rumour':
@@ -113,42 +91,49 @@ def sa_score_replies(rumours_datalist, non_rumours_datalist):
     non_rumour_texts = []
     rumours_sa = []
     non_rumours_sa = []
-
+    print("rumours_datalist...")
     for item in rumours_datalist:
         rumour_text = ""
         for tweet in item:
             rumour_text += (tweet["text"] + " ")
         rumour_texts.append(rumour_text)
-
+    print("non_rumours_datalist...")
     for item in non_rumours_datalist:
         non_rumour_text = ""
         for tweet in item:
             non_rumour_text += (tweet["text"] + " ")
         non_rumour_texts.append(non_rumour_text)
-
+    print("rumour_texts...")
     for text in rumour_texts:
-        rumours_sa.append([TextBlob(text).sentiment[0], TextBlob(text).sentiment[1],
-                           sa_text(TextBlob(text).sentiment[0])])
-
+        text = clean_tweet(text)
+        polarity = TextBlob(text).sentiment[0]
+        rumours_sa.append([polarity, TextBlob(text).sentiment[1],
+                           sa_text(polarity)])
+    print("non_rumour_texts...")
     for text in non_rumour_texts:
-        non_rumours_sa.append([TextBlob(text).sentiment[0], TextBlob(text).sentiment[1],
-                               sa_text(TextBlob(text).sentiment[0])])
+        text = clean_tweet(text)
+        polarity = TextBlob(text).sentiment[0]
+        non_rumours_sa.append([polarity, TextBlob(text).sentiment[1],
+                               sa_text(polarity)])
 
-    rumours_sa = rumours_sa[:4000]
-    non_rumours_sa = non_rumours_sa[:4000]
+    # print(len(rumours_sa))
+    # print(len(non_rumours_sa))
+
+    rumours_sa = random.sample(rumours_sa, 1000)
+    non_rumours_sa = random.sample(non_rumours_sa, 1000)
 
     rumours_df = pd.DataFrame(data=rumours_sa, columns=['Polarity', 'Subjectivity', 'Description'])
 
     non_rumours_df = pd.DataFrame(data=non_rumours_sa, columns=['Polarity', 'Subjectivity', 'Description'])
 
-    return rumours_df.groupby(['Description']).size().reset_index(name='Counts'), non_rumours_df.groupby(
-        ['Description']).size().reset_index(name='Counts')
+    return rumours_df, non_rumours_df
 
 
-def plot_sa(rumour, non_rumour):
+def plot_sa(rumours_df, non_rumours_df):
     labels = ['Negative', 'Neutral', 'Positive']
-    rumour_counts = rumour.iloc[:, 1].tolist()
-    non_rumour_counts = non_rumour.iloc[:, 1].tolist()
+
+    rumour_counts = rumours_df.groupby(['Description']).size().reset_index(name='Counts').iloc[:, 1].tolist()
+    non_rumour_counts = non_rumours_df.groupby(['Description']).size().reset_index(name='Counts').iloc[:, 1].tolist()
 
     x = np.arange(len(labels))  # the label locations
     width = 0.35  # the width of the bars
@@ -207,28 +192,26 @@ def extract_hashtag(rumour_list, non_rumour_list):
 
 
 def main():
-    # dataset = TweetDataset(DEV_DATA_PATH)
+    # # Classify the covid-19 dataset and save the predict label file as test_pred_label.json
+    # dataset = TweetDataset(TEST_DATA_PATH)
     # data_loader = DataLoader(dataset, batch_size=1)
     # model = load_model()
     # predict(model, data_loader)
-    # for param_tensor in model.state_dict():
-    #     print(param_tensor, "\t", model.state_dict()[param_tensor].size())
+
+    # hashtags extraction
     rumours_datalist, non_rumours_datalist = classify_dataset()
-    # sa_score_replies()
+    rumour_hashtags, non_rumour_hashtags = extract_hashtag(rumours_datalist, non_rumours_datalist)
 
-    # # hashtags extraction
+    rumour_hashtags_sorted = sorted(rumour_hashtags.items(), key=lambda item: item[1], reverse=True)
+    non_rumour_hashtags_sorted = sorted(non_rumour_hashtags.items(), key=lambda item: item[1], reverse=True)
+    #
+    print(rumour_hashtags_sorted[:10])
+    print(non_rumour_hashtags_sorted[:10])
+
+    # # sentiment scores calculation and display the result
     # rumours_datalist, non_rumours_datalist = classify_dataset()
-    # rumour_hashtags, non_rumour_hashtags = extract_hashtag(rumours_datalist, non_rumours_datalist)
-    #
-    # rumour_hashtags_sorted = sorted(rumour_hashtags.items(), key=lambda item: item[1], reverse=True)
-    # non_rumour_hashtags_sorted = sorted(non_rumour_hashtags.items(), key=lambda item: item[1], reverse=True)
-    #
-    # print(rumour_hashtags_sorted[:10])
-    # print(non_rumour_hashtags_sorted[:10])
-
-    # sentiment scores calculation and display the result
-    rumours_df, non_rumours_df = sa_score_replies(rumours_datalist, non_rumours_datalist)
-    plot_sa(rumours_df, non_rumours_df)
+    # rumours_df, non_rumours_df = sa_score_replies(rumours_datalist, non_rumours_datalist)
+    # plot_sa(rumours_df, non_rumours_df)
 
 
 if __name__ == '__main__':
